@@ -85,6 +85,8 @@
 !   Laura D. Fowler (laura@ucar.edu) / 2024-06-18.
 ! * renamed "bl_ysu_gwdo" to "bl_kim_gwdo" 
 !   Songyou Hong (hong@ucar.edu) / 2025-08-24.
+! * added the UDM microphysics scheme.
+!   Songyou Hong (hong@ucar.edu) / 2026-08-24.
 
 
  contains
@@ -179,6 +181,7 @@
            config_microp_scheme .eq. 'mp_kessler'           .or. &
            config_microp_scheme .eq. 'mp_thompson'          .or. &
            config_microp_scheme .eq. 'mp_thompson_aerosols' .or. &
+           config_microp_scheme .eq. 'mp_udm'               .or. &
            config_microp_scheme .eq. 'mp_wsm6')) then
 
     write(mpas_err_message,'(A,A20)') 'illegal value for config_microp_scheme:', &

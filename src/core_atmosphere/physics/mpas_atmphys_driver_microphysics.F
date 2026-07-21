@@ -19,6 +19,7 @@
 !wrf physics:
  use module_mp_kessler
  use module_mp_thompson
+ use module_mp_udm
  use module_mp_wsm6,only: wsm6
  use mp_wsm6,only: mp_wsm6_init,refl10cm_wsm6
 
@@ -51,6 +52,7 @@
 ! * module_mp_kessler : Kessler cloud microphysics.
 ! * module_mp_thompson: Thompson cloud microphysics.
 ! * module_mp_wsm6    : WSM6 cloud microphysics.
+! * module_mp_udm     : UDM cloud microphysics.
 !
 ! comments:
 ! unlike all the other physics parameterizations, parameterizations of cloud microphysics schemes
@@ -127,7 +129,7 @@
  if(.not.allocated(rainncv_p)) allocate(rainncv_p(ims:ime,jms:jme))
 
  microp_select: select case(trim(microp_scheme))
-    case ("mp_thompson","mp_thompson_aerosols","mp_wsm6")
+    case ("mp_thompson","mp_thompson_aerosols","mp_wsm6","mp_udm")
        !mass mixing ratios:
        if(.not.allocated(qi_p)) allocate(qi_p(ims:ime,kms:kme,jms:jme))
        if(.not.allocated(qs_p)) allocate(qs_p(ims:ime,kms:kme,jms:jme))
@@ -155,9 +157,13 @@
           if(.not.allocated(muc_p)) allocate(muc_p(ims:ime,jms:jme))
           if(.not.allocated(ni_p) ) allocate(ni_p(ims:ime,kms:kme,jms:jme))
           if(.not.allocated(nr_p) ) allocate(nr_p(ims:ime,kms:kme,jms:jme))
+       case("mp_udm")
+          if(.not.allocated(qh_p)    ) allocate(qh_p(ims:ime,kms:kme,jms:jme))
+          if(.not.allocated(nccn_p)  ) allocate(nccn_p(ims:ime,kms:kme,jms:jme))
+          if(.not.allocated(nr_p)    ) allocate(nr_p(ims:ime,kms:kme,jms:jme))
 
           microp3_select: select case(trim(microp_scheme))
-             case("mp_thompson_aerosols")
+             case("mp_thompson_aerosols","mp_udm")
                 if(.not.allocated(nifa2d_p)) allocate(nifa2d_p(ims:ime,jms:jme))
                 if(.not.allocated(nwfa2d_p)) allocate(nwfa2d_p(ims:ime,jms:jme))
                 if(.not.allocated(nc_p)    ) allocate(nc_p(ims:ime,kms:kme,jms:jme)  )
@@ -166,7 +172,6 @@
 
              case default
           end select microp3_select
-
        case default
     end select microp2_select
 
@@ -208,7 +213,7 @@
  if(allocated(rainncv_p)) deallocate(rainncv_p)
 
  microp_select: select case(trim(microp_scheme))
-    case ("mp_thompson","mp_thompson_aerosols","mp_wsm6")
+    case ("mp_thompson","mp_thompson_aerosols","mp_wsm6","mp_udm")
        !mass mixing ratios:
        if(allocated(qi_p)) deallocate(qi_p)
        if(allocated(qs_p)) deallocate(qs_p)
@@ -236,9 +241,13 @@
           if(allocated(muc_p)) deallocate(muc_p)
           if(allocated(ni_p) ) deallocate(ni_p )
           if(allocated(nr_p) ) deallocate(nr_p )
+       case("mp_udm")
+          if(allocated(qh_p)  ) deallocate(qh_p)
+          if(allocated(nccn_p)) deallocate(nccn_p)
+          if(allocated(nr_p)  ) deallocate(nr_p)
 
           microp3_select: select case(trim(microp_scheme))
-             case("mp_thompson_aerosols")
+             case("mp_thompson_aerosols","mp_udm")
                 if(allocated(nifa2d_p)) deallocate(nifa2d_p)
                 if(allocated(nwfa2d_p)) deallocate(nwfa2d_p)
                 if(allocated(nc_p)    ) deallocate(nc_p    )
@@ -247,7 +256,6 @@
 
              case default
           end select microp3_select
-
        case default
     end select microp2_select
 
@@ -305,6 +313,17 @@
     case("mp_wsm6")
        call mp_wsm6_init(den0=rho_a,denr=rho_r,dens=rho_s,cl=cliq,cpv=cpv, &
                          hail_opt=hail_opt,errmsg=errmsg,errflg=errflg)
+
+    case("mp_udm")
+       call mp_udm_init(den0=rho_a,denr=rho_r,dens=rho_s,cl=cliq, cv=cpv,      &
+                         ccn0=ccn_conc,&
+                         NWFA2D=nwfa2d,                                        &
+                         NWFA=NWFA,                                            &
+                         NIFA=NIFA,                                            &
+                         if_aerosol_aware=config_flags%if_aerosol_aware,       &
+                         IDS=ids, IDE=ide, JDS=jds, JDE=jde, KDS=kds, KDE=kde, &
+                         IMS=ims, IME=ime, JMS=jms, JME=jme, KMS=kms, KME=kme, &
+                         ITS=its, ITE=ite, JTS=jts, JTE=jte, KTS=kts, KTE=kte)
 
     case default
  end select microp_select
@@ -460,6 +479,34 @@
                )
        call mpas_timer_stop('mp_wsm6')
 
+    case ("mp_udm")
+       call mpas_timer_start('mp_udm')
+       call udm( &
+                th        = th_p        , q          = qv_p         , qc    = qc_p,   &
+                qr        = qr_p        , qi         = qi_p         , qs    = qs_p,   &
+                qg        = qg_p        , qh         = qh_p         , nn    = nccn_p, &
+                nc        = nc_p        , nr         = nr_p         , w   = w_p,    &
+                tke       = tke_p       , den        = rho_p        , pii = pi_p      &
+                p         = pres_p      , delz       = dz_p         , delt = dt_microp , &
+                g         = gravity     , cpd        = cp           , cpv = cpv     , &
+                rd        = R_d         , rv         = R_v          , t0c = svpt0   , &
+                ep1       = ep_1        , ep2        = ep_2         , qmin = epsilon, &
+                xls       = xls         , xlv0       = xlv          , xlf0 = xlf   , &
+                den0      = rho_a       , denr       = rho_w        , cliq = cliq  , &
+                cice      = cice        , psat       = psat         , rain= rainnc_p, &
+                xland     = xland       , xice       = xice         , &
+                rainncv   = rainncv_p   , snow       = snownc_p   , snowncv= snowncv_p , &
+                graupel   = graupelnc_p , graupelncv = graupelncv_p ,  &
+                hail      = hailnc_p    , hailncv    = hailncv_p , sr  = sr_p   , &
+                re_cloud  = recloud_p   , re_ice     = reice_p      , re_snow= resnow_p, &
+                has_reqc  = has_reqc    , has_reqi   = has_reqi ,has_reqs  = has_reqs  , &
+                errmsg    = errmsg      , errflg     = errflg                 , &
+                ids = ids, ide = ide, jds = jds, jde = jde, kds = kds, kde = kde    , &
+                ims = ims, ime = ime, jms = jms, jme = jme, kms = kms, kme = kme    , &
+                its = its, ite = ite, jts = jts, jte = jte, kts = kts, kte = kte     &
+               )
+       call mpas_timer_stop('mp_udm')
+
     case default
  end select microp_select
 
@@ -468,6 +515,7 @@
     !ensure that we only call compute_radar_reflectivity() if we are using an MPS that supports
     !the computation of simulated radar reflectivity:
     if(trim(microp_scheme) == "mp_wsm6"     .or. &
+    if(trim(microp_scheme) == "mp_udm"      .or. &
        trim(microp_scheme) == "mp_thompson" .or. &
        trim(microp_scheme) == "mp_thompson_aerosols") then
        call compute_radar_reflectivity(configs,diag_physics,its,ite)
@@ -522,6 +570,7 @@
 
  call mpas_pool_get_config(configs,'config_microp_scheme',microp_scheme)
 
+ call mpas_pool_get_array(diag_physics,'hailncv',hailncv)
  call mpas_pool_get_array(diag_physics,'graupelncv',graupelncv)
  call mpas_pool_get_array(diag_physics,'rainncv'   ,rainncv   )
  call mpas_pool_get_array(diag_physics,'snowncv'   ,snowncv   )
@@ -541,7 +590,7 @@
 
 !variables specific to different cloud microphysics schemes:
  microp_select: select case(trim(microp_scheme))
-    case ("mp_thompson","mp_thompson_aerosols","mp_wsm6")
+    case ("mp_thompson","mp_thompson_aerosols","mp_wsm6","mp_udm")
        do j = jts, jte
        do i = its, ite
           snowncv_p(i,j)    = 0._RKIND
@@ -556,6 +605,18 @@
           snowncv(i)    = 0._RKIND
           graupelncv(i) = 0._RKIND
           sr(i)         = 0._RKIND
+       enddo
+
+    case ("mp_udm")
+       do j = jts, jte
+       do i = its, ite
+          hailncv_p(i,j)    = 0._RKIND
+          hailnc_p(i,j)     = 0._RKIND
+       enddo
+       enddo
+
+       do i = its,ite
+          hailncv(i)    = 0._RKIND
        enddo
 
     case default
@@ -633,7 +694,7 @@
 
 !variables specific to different cloud microphysics schemes:
  microp_select: select case(trim(microp_scheme))
-    case ("mp_thompson","mp_thompson_aerosols","mp_wsm6")
+    case ("mp_thompson","mp_thompson_aerosols","mp_wsm6","mp_udm")
        do j = jts,jte
        do i = its,ite
           !time-step precipitation:
@@ -644,6 +705,13 @@
           !accumulated precipitation:
           snownc(i)    = snownc(i) + snowncv(i)
           graupelnc(i) = graupelnc(i) + graupelncv(i)
+       enddo
+       enddo
+    case ("mp_udm")
+       do j = jts,jte
+       do i = its,ite
+          hailncv(i)    = hailnc_p(i,j)
+          hailnc(i)    = hailnc(i) + hailncv(i)
        enddo
        enddo
 
@@ -671,6 +739,7 @@
 !local variables and arrays:
  integer:: i,j,k,kp
  real(kind=RKIND),dimension(:),allocatable:: qv1d,qc1d,qr1d,qs1d,qg1d,t1d,p1d,nr1d,dBZ1d,zp
+ real(kind=RKIND),dimension(:),allocatable:: qh1d
  real(kind=RKIND):: w1,w2
 
 !-----------------------------------------------------------------------------------------------------------------
@@ -789,6 +858,65 @@
        if(allocated(dBz1d)) deallocate(dBZ1d)
        if(allocated(zp)   ) deallocate(zp   )
 
+    case ("udm")
+       if(.not.allocated(p1d)  ) allocate(p1d(kts:kte)  )
+       if(.not.allocated(t1d)  ) allocate(t1d(kts:kte)  )
+       if(.not.allocated(qv1d) ) allocate(qv1d(kts:kte) )
+       if(.not.allocated(qc1d) ) allocate(qc1d(kts:kte) )
+       if(.not.allocated(qr1d) ) allocate(qr1d(kts:kte) )
+       if(.not.allocated(qs1d) ) allocate(qs1d(kts:kte) )
+       if(.not.allocated(qg1d) ) allocate(qg1d(kts:kte) )
+       if(.not.allocated(qh1d) ) allocate(qh1d(kts:kte) )
+       if(.not.allocated(nr1d) ) allocate(nr1d(kts:kte) )
+       if(.not.allocated(dBz1d)) allocate(dBZ1d(kts:kte))
+       if(.not.allocated(zp)   ) allocate(zp(kts:kte)   )
+
+       do j = jts,jte
+       do i = its,ite
+          do k = kts,kte
+             p1d(k) = pres_p(i,k,j)
+             t1d(k) = th_p(i,k,j) * pi_p(i,k,j)
+             qv1d(k)  = qv_p(i,k,j)
+             qc1d(k)  = qc_p(i,k,j)
+             qr1d(k)  = qr_p(i,k,j)
+             qs1d(k)  = qs_p(i,k,j)
+             qg1d(k)  = qg_p(i,k,j)
+             qh1d(k)  = qh_p(i,k,j)
+             nr1d(k)  = nr_p(i,k,j)
+             dBZ1d(k) = -35._RKIND
+             zp(k) = z_p(i,k,j) - z_p(i,1,j) + 0.5*dz_p(i,k,j) ! height AGL
+          enddo
+
+          call udm_mp_reflectivity (qv1d, qr1d, qs1d, qg1d,       &
+                  nr1d,                                           &
+                  qh1d,                                           &
+                  t1d, p1d, dbz1d, kts, kte, i, j)
+
+          kp = 1
+          do k = kts,kte
+             dBZ1d(k) = max(-35._RKIND,dBZ1d(k))
+             refl10cm(k,i) = dBZ1d(k)
+             if(zp(k) .lt. 1000.) kp = k
+          enddo
+          refl10cm_max(i) = maxval(dBZ1d(:))
+          w1 = (zp(kp+1)-1000.)/(zp(kp+1)-zp(kp))
+          w2 = 1.0 - w1
+          refl10cm_1km(i) = w1*dBZ1d(kp) + w2*dBZ1d(kp+1)
+          refl10cm_1km_max(i) = max(refl10cm_1km_max(i),refl10cm_1km(i))
+       enddo
+       enddo
+
+       if(allocated(p1d)  ) deallocate(p1d  )
+       if(allocated(t1d)  ) deallocate(t1d  )
+       if(allocated(qv1d) ) deallocate(qv1d )
+       if(allocated(qc1d) ) deallocate(qc1d )
+       if(allocated(qr1d) ) deallocate(qr1d )
+       if(allocated(qs1d) ) deallocate(qs1d )
+       if(allocated(qg1d) ) deallocate(qg1d )
+       if(allocated(qh1d) ) deallocate(qh1d )
+       if(allocated(nr1d) ) deallocate(nr1d )
+       if(allocated(dBz1d)) deallocate(dBZ1d)
+       if(allocated(zp)   ) deallocate(zp   )
     case default
  end select microp_select
 

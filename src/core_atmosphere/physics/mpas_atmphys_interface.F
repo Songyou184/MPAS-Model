@@ -129,7 +129,7 @@
  if(.not.allocated(qg_p)   ) allocate(qg_p(ims:ime,kms:kme,jms:jme)   )
 
  microp_select: select case(trim(microp_scheme))
-    case("mp_thompson_aerosols")
+    case("mp_thompson_aerosols","mp_udm")
        if(.not.allocated(nifa_p)) allocate(nifa_p(ims:ime,kms:kme,jms:jme))
        if(.not.allocated(nwfa_p)) allocate(nwfa_p(ims:ime,kms:kme,jms:jme))
 
@@ -204,7 +204,7 @@
  if(allocated(qg_p)    ) deallocate(qg_p    )
 
  microp_select: select case(trim(microp_scheme))
-    case("mp_thompson_aerosols")
+    case("mp_thompson_aerosols","mp_udm")
        if(allocated(nifa_p)) deallocate(nifa_p)
        if(allocated(nwfa_p)) deallocate(nwfa_p)
 
@@ -355,7 +355,7 @@
  enddo
 
  microp_select: select case(trim(microp_scheme))
-    case("mp_thompson_aerosols")
+    case("mp_thompson_aerosols","mp_udm")
        nullify(nifa)
        nullify(nwfa)
        call mpas_pool_get_dimension(state,'index_nifa',index_nifa)
@@ -676,7 +676,7 @@ end subroutine pre_microphysics
 
 !initialize cloud water species and aerosols as function of cloud microphysics scheme:
  mp_select: select case(trim(mp_scheme))
-    case("mp_thompson","mp_thompson_aerosols","mp_wsm6")
+    case("mp_thompson","mp_thompson_aerosols","mp_wsm6","mp_udm")
        call mpas_pool_get_dimension(state,'index_qi',index_qi)
        call mpas_pool_get_dimension(state,'index_qs',index_qs)
        call mpas_pool_get_dimension(state,'index_qg',index_qg)
@@ -728,8 +728,21 @@ end subroutine pre_microphysics
              enddo
              enddo
 
+          case("mp_udm")
+             call mpas_pool_get_dimension(state,'index_qh',index_qg)
+             call mpas_pool_get_dimension(state,'index_nr',index_nr)
+             qh => scalars(index_qh,:,:)
+             nr   => scalars(index_nr,:,:)
+             do k = kts, kte
+             do i = its, ite
+                qh_p(i,k,j) = qh(k,i)
+                nr_p(i,k,j) = nr(k,i)
+             enddo
+             enddo
+             enddo
+
           mp3_select: select case(trim(mp_scheme))
-             case("mp_thompson_aerosols")
+             case("mp_thompson_aerosols","mp_udm")
                 call mpas_pool_get_dimension(state,'index_nc'  ,index_nc  )
                 call mpas_pool_get_dimension(state,'index_nifa',index_nifa)
                 call mpas_pool_get_dimension(state,'index_nwfa',index_nwfa)
@@ -764,7 +777,7 @@ end subroutine pre_microphysics
 
 !begin calculation of cloud microphysics tendencies:
  mp_tend_select: select case(trim(mp_scheme))
-    case("mp_thompson","mp_thompson_aerosols","mp_wsm6")
+    case("mp_thompson","mp_thompson_aerosols","mp_wsm6","mp_udm")
        call mpas_pool_get_array(tend_physics,'rthmpten',rthmpten)
        call mpas_pool_get_array(tend_physics,'rqvmpten',rqvmpten)
        call mpas_pool_get_array(tend_physics,'rqcmpten',rqcmpten)
@@ -797,8 +810,19 @@ end subroutine pre_microphysics
              enddo
              enddo
 
+          case("mp_udm")
+             call mpas_pool_get_array(tend_physics,'rnrmpten',rnrmpten)
+             call mpas_pool_get_array(tend_physics,'rqhmpten',rqhmpten)
+
+             do k = kts,kte
+             do i = its,ite
+                rnrmpten(k,i) = nr(k,i)
+                rqhmpten(k,i) = qh(k,i)
+             enddo
+             enddo
+
              mp3_tend_select: select case(trim(mp_scheme))
-                case("mp_thompson_aerosols")
+                case("mp_thompson_aerosols","mp_udm")
                    call mpas_pool_get_array(tend_physics,'rncmpten',rncmpten)
                    call mpas_pool_get_array(tend_physics,'rnifampten',rnifampten)
                    call mpas_pool_get_array(tend_physics,'rnwfampten',rnwfampten)
@@ -965,7 +989,7 @@ end subroutine pre_microphysics
 
 !update cloud water species and aerosols as functions of cloud microphysics schemes:
  mp_select: select case(trim(mp_scheme))
-    case("mp_thompson","mp_thompson_aerosols","mp_wsm6")
+    case("mp_thompson","mp_thompson_aerosols","mp_wsm6","mp_udm")
        call mpas_pool_get_dimension(state,'index_qi',index_qi)
        call mpas_pool_get_dimension(state,'index_qs',index_qs)
        call mpas_pool_get_dimension(state,'index_qg',index_qg)
@@ -1028,8 +1052,23 @@ end subroutine pre_microphysics
              enddo
              enddo
 
+          case("mp_udm")
+             call mpas_pool_get_dimension(state,'index_qh',index_qh)
+             call mpas_pool_get_dimension(state,'index_nr',index_nr)
+             qh   => scalars(index_qh,:,:)
+             nr   => scalars(index_nr,:,:)
+
+             do j = jts,jte
+             do k = kts,kte
+             do i = its,ite
+                qh(k,i) = qh_p(i,k,j)
+                nr(k,i) = nr_p(i,k,j)
+             enddo
+             enddo
+             enddo
+
              mp3_select: select case(trim(mp_scheme))
-                case("mp_thompson_aerosols")
+                case("mp_thompson_aerosols","mp_udm")
                    call mpas_pool_get_dimension(state,'index_nc'  ,index_nc  )
                    call mpas_pool_get_dimension(state,'index_nifa',index_nifa)
                    call mpas_pool_get_dimension(state,'index_nwfa',index_nwfa)
@@ -1064,7 +1103,7 @@ end subroutine pre_microphysics
 
 !end calculation of cloud microphysics tendencies:
  mp_tend_select: select case(trim(mp_scheme))
-    case("mp_thompson","mp_thompson_aerosols","mp_wsm6")
+    case("mp_thompson","mp_thompson_aerosols","mp_wsm6","mp_udm")
        call mpas_pool_get_array(tend_physics,'rthmpten',rthmpten)
        call mpas_pool_get_array(tend_physics,'rqvmpten',rqvmpten)
        call mpas_pool_get_array(tend_physics,'rqcmpten',rqcmpten)
@@ -1112,8 +1151,19 @@ end subroutine pre_microphysics
              enddo
              enddo
 
+          case("mp_udm")
+             call mpas_pool_get_array(tend_physics,'rqhmpten',rqhmpten)
+             call mpas_pool_get_array(tend_physics,'rnrmpten',rnrmpten)
+
+             do k = kts,kte
+             do i = its,ite
+                rqhmpten(k,i) = (qh(k,i)-rqhmpten(k,i))/dt_dyn
+                rnrmpten(k,i) = (nr(k,i)-rnrmpten(k,i))/dt_dyn
+             enddo
+             enddo
+
              mp3_tend_select: select case(trim(mp_scheme))
-                case("mp_thompson_aerosols")
+                case("mp_thompson_aerosols","mp_udm")
                    call mpas_pool_get_array(tend_physics,'rncmpten',rncmpten)
                    call mpas_pool_get_array(tend_physics,'rnifampten',rnifampten)
                    call mpas_pool_get_array(tend_physics,'rnwfampten',rnwfampten)
